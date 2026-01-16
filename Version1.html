@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Google OAuth Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+
+<body style="text-align:center; margin-top:100px; font-family:Arial">
+
+  <h2>Google Login - Ambassador Club</h2>
+
+  <div id="g_id_onload"
+       data-client_id="716907380841-tj9caam3eie48bbmiu7maeck37fcdmnj.apps.googleusercontent.com"
+       data-callback="handleCredentialResponse">
+  </div>
+
+  <div class="g_id_signin"
+       data-type="standard"
+       data-size="large">
+  </div>
+
+  <pre id="output"></pre>
+
+  <script>
+    function handleCredentialResponse(response) {
+      document.getElementById("output").innerText =
+        "JWT Token:\n\n" + response.credential;
+    }
+  </script>
+
+</body>
+</html>
