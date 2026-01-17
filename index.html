@@ -610,10 +610,10 @@
       // Show progress overlay
       document.getElementById('progressOverlay').style.display = 'flex';
       document.getElementById('dataStatus').style.display = 'block';
-      updateProgress('Getting data info...', 5, 'Starting', '-');
+      updateProgress('Getting sheet info...', 5, 'Starting', '-');
       
       try {
-        // Step 1: Get total row count
+        // Step 1: Get total row count (this is fast, just metadata)
         const infoResponse = await fetch(`${APPS_SCRIPT_URL}?action=getInfo`);
         const info = await infoResponse.json();
         
@@ -622,41 +622,55 @@
         }
         
         const totalRows = info.totalRows;
-        const totalPages = info.totalPages;
-        const pageSize = info.pageSize;
+        updateProgress(`Found ${totalRows} rows. Starting to load...`, 10, 'Loading', 0);
         
-        updateProgress(`Found ${totalRows} rows. Loading in chunks...`, 10, 'Loading', totalRows);
-        
-        // Step 2: Load all pages
+        // Step 2: Load data in chunks
         allRawData = [];
+        const chunkSize = 500; // Load 500 rows at a time
+        let currentRow = 1; // Start from row 1 (headers)
+        let loadedRows = 0;
         
-        for (let page = 0; page < totalPages; page++) {
-          const percentage = 10 + Math.round((page / totalPages) * 60); // 10% to 70%
+        while (currentRow <= totalRows) {
+          const percentage = 10 + Math.round((loadedRows / totalRows) * 65); // 10% to 75%
           updateProgress(
-            `Loading chunk ${page + 1} of ${totalPages}...`, 
+            `Loading rows ${currentRow} to ${Math.min(currentRow + chunkSize - 1, totalRows)}...`, 
             percentage, 
             'Loading',
-            allRawData.length
+            loadedRows
           );
           
-          const pageResponse = await fetch(`${APPS_SCRIPT_URL}?page=${page}&pageSize=${pageSize}`);
-          const pageResult = await pageResponse.json();
+          const chunkResponse = await fetch(
+            `${APPS_SCRIPT_URL}?startRow=${currentRow}&numRows=${chunkSize}`
+          );
+          const chunkResult = await chunkResponse.json();
           
-          if (pageResult.error) {
-            throw new Error(pageResult.error);
+          if (chunkResult.error) {
+            throw new Error(chunkResult.error);
           }
           
-          if (pageResult.data && Array.isArray(pageResult.data)) {
-            // For first page, include header. For subsequent pages, skip header
-            if (page === 0) {
-              allRawData = pageResult.data;
+          if (chunkResult.data && Array.isArray(chunkResult.data) && chunkResult.data.length > 0) {
+            // For first chunk, include everything. For subsequent chunks, skip if it's header
+            if (currentRow === 1) {
+              allRawData = chunkResult.data;
             } else {
-              allRawData = allRawData.concat(pageResult.data);
+              allRawData = allRawData.concat(chunkResult.data);
             }
+            
+            loadedRows += chunkResult.data.length;
           }
+          
+          // Check if there's more data
+          if (!chunkResult.hasMore) {
+            break;
+          }
+          
+          currentRow = chunkResult.endRow + 1;
+          
+          // Small delay to prevent rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
         
-        updateProgress('All data loaded! Processing...', 75, 'Processing', allRawData.length);
+        updateProgress('All data loaded! Processing ambassadors...', 80, 'Processing', allRawData.length);
         
         // Step 3: Process all data
         await processAllData();
@@ -675,7 +689,7 @@
         let errorMessage = 'Failed to load data: ' + error.message;
         
         showError(errorMessage);
-        document.getElementById('dataStatus').innerHTML = '❌ ' + errorMessage;
+        document.getElementById('dataStatus').innerHTML = '❌ ' + errorMessage + ' <button onclick="location.reload()" style="margin-left: 10px; padding: 5px 15px; cursor: pointer;">Retry</button>';
         document.getElementById('dataStatus').className = 'data-status';
         document.getElementById('dataStatus').style.background = '#fee';
         document.getElementById('dataStatus').style.borderColor = '#c33';
