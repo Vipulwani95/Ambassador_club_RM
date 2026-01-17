@@ -479,6 +479,10 @@
 
       <div class="search-section">
         <h2 style="margin-bottom: 20px; color: #333;">Search Ambassador</h2>
+        <div style="margin-bottom: 15px; padding: 10px; background: #fff3cd; border-radius: 8px; font-size: 14px;">
+          <strong>Note:</strong> Make sure your Apps Script is deployed as a Web App with "Anyone" access.
+          <a href="javascript:testConnection()" style="color: #667eea; margin-left: 10px;">Test Connection</a>
+        </div>
         <div class="search-box">
           <div class="search-input-wrapper">
             <input 
@@ -614,8 +618,23 @@
       
       try {
         // Step 1: Get total row count (this is fast, just metadata)
-        const infoResponse = await fetch(`${APPS_SCRIPT_URL}?action=getInfo`);
-        const info = await infoResponse.json();
+        console.log('Fetching info from:', `${APPS_SCRIPT_URL}?action=getInfo`);
+        
+        const infoResponse = await fetch(`${APPS_SCRIPT_URL}?action=getInfo`, {
+          method: 'GET',
+          redirect: 'follow'
+        });
+        
+        console.log('Info response status:', infoResponse.status);
+        
+        if (!infoResponse.ok) {
+          throw new Error(`HTTP error! status: ${infoResponse.status}`);
+        }
+        
+        const infoText = await infoResponse.text();
+        console.log('Info response text:', infoText.substring(0, 200));
+        
+        const info = JSON.parse(infoText);
         
         if (info.error) {
           throw new Error(info.error);
@@ -639,10 +658,22 @@
             loadedRows
           );
           
+          console.log(`Fetching rows ${currentRow} to ${currentRow + chunkSize - 1}`);
+          
           const chunkResponse = await fetch(
-            `${APPS_SCRIPT_URL}?startRow=${currentRow}&numRows=${chunkSize}`
+            `${APPS_SCRIPT_URL}?startRow=${currentRow}&numRows=${chunkSize}`,
+            {
+              method: 'GET',
+              redirect: 'follow'
+            }
           );
-          const chunkResult = await chunkResponse.json();
+          
+          if (!chunkResponse.ok) {
+            throw new Error(`HTTP error! status: ${chunkResponse.status}`);
+          }
+          
+          const chunkText = await chunkResponse.text();
+          const chunkResult = JSON.parse(chunkText);
           
           if (chunkResult.error) {
             throw new Error(chunkResult.error);
@@ -684,16 +715,38 @@
 
       } catch (error) {
         console.error('Error loading data:', error);
+        console.error('Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+        
         document.getElementById('progressOverlay').style.display = 'none';
         
-        let errorMessage = 'Failed to load data: ' + error.message;
+        let errorMessage = error.message;
+        let helpText = '';
+        
+        if (error.message === 'Failed to fetch') {
+          errorMessage = 'Cannot connect to Google Apps Script';
+          helpText = '<br><br><strong>Possible issues:</strong><br>' +
+                    '1. Apps Script not deployed as Web App<br>' +
+                    '2. Apps Script permissions not set to "Anyone"<br>' +
+                    '3. Apps Script URL is incorrect<br>' +
+                    '4. Network/firewall blocking the request<br><br>' +
+                    '<strong>Apps Script URL:</strong><br>' +
+                    '<code style="font-size: 11px; word-break: break-all;">' + APPS_SCRIPT_URL + '</code><br><br>' +
+                    '<a href="' + APPS_SCRIPT_URL + '?action=getInfo" target="_blank" style="color: #667eea;">Click here to test the URL directly</a>';
+        }
         
         showError(errorMessage);
-        document.getElementById('dataStatus').innerHTML = '❌ ' + errorMessage + ' <button onclick="location.reload()" style="margin-left: 10px; padding: 5px 15px; cursor: pointer;">Retry</button>';
+        document.getElementById('dataStatus').innerHTML = 
+          '❌ ' + errorMessage + helpText + 
+          '<br><br><button onclick="location.reload()" style="margin-top: 10px; padding: 8px 20px; cursor: pointer; background: #667eea; color: white; border: none; border-radius: 6px;">Retry</button>';
         document.getElementById('dataStatus').className = 'data-status';
         document.getElementById('dataStatus').style.background = '#fee';
         document.getElementById('dataStatus').style.borderColor = '#c33';
         document.getElementById('dataStatus').style.color = '#c33';
+        document.getElementById('dataStatus').style.textAlign = 'left';
       }
     }
 
@@ -1010,6 +1063,34 @@
         searchAmbassador();
       }
     });
+
+    async function testConnection() {
+      const testUrl = `${APPS_SCRIPT_URL}?action=getInfo`;
+      alert('Testing connection to:\n' + testUrl + '\n\nCheck browser console (F12) for details.');
+      
+      console.log('Testing URL:', testUrl);
+      
+      try {
+        const response = await fetch(testUrl);
+        console.log('Response status:', response.status);
+        console.log('Response headers:', [...response.headers.entries()]);
+        
+        const text = await response.text();
+        console.log('Response text:', text);
+        
+        const json = JSON.parse(text);
+        console.log('Parsed JSON:', json);
+        
+        if (json.success) {
+          alert('✅ Connection successful!\n\nTotal rows: ' + json.totalRows);
+        } else if (json.error) {
+          alert('❌ Apps Script returned an error:\n' + json.error);
+        }
+      } catch (error) {
+        console.error('Test failed:', error);
+        alert('❌ Connection failed!\n\nError: ' + error.message + '\n\nCheck browser console for details.');
+      }
+    }
   </script>
 </body>
 </html>
