@@ -928,3 +928,47 @@
             <td>${city.apartment}</td>
             <td>${city.standalone}</td>
             <td class="${getConversionClass(city.conversion)}">${city.conversion}${city.conversion !== '-' ? '%' : ''}</td>
+          </tr>
+        `;
+      });
+
+      tableHTML += `
+            <tr class="totals-row">
+              <td><strong>TOTAL</strong></td>
+              <td>${totals.totalLeads}</td>
+              <td>${totals.workableLeads}</td>
+              <td>${totals.paidListing}</td>
+              <td>${totals.apartment}</td>
+              <td>${totals.standalone}</td>
+              <td>${totals.conversion}%</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+
+      tableContainer.innerHTML = tableHTML;
+    }
+
+    function getConversionClass(conversion) {
+      if (conversion === '-') return '';
+      const rate = parseFloat(conversion);
+      if (rate >= 20) return 'conversion-good';
+      if (rate >= 10) return 'conversion-medium';
+      return 'conversion-low';
+    }
+
+    function showError(message) {
+      const errorSection = document.getElementById('errorSection');
+      errorSection.innerHTML = `<div class="error">${message}</div>`;
+      errorSection.style.display = 'block';
+    }
+
+    phoneInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && dataLoaded) {
+        autocompleteDropdown.style.display = 'none';
+        searchAmbassador();
+      }
+    });
+  </script>
+</body>
+</html>
