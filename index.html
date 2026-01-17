@@ -523,7 +523,7 @@
           <div class="progress-stat-value" id="totalRows">-</div>
         </div>
       </div>
-      <p style="color: #888; margin-top: 20px;" id="progressMessage">Please wait while we load all data...</p>
+      <p style="color: #888; margin-top: 20px;" id="progressMessage">Large dataset - this may take 5-10 minutes. Please keep this tab open...</p>
     </div>
   </div>
 
@@ -610,34 +610,58 @@
       // Show progress overlay
       document.getElementById('progressOverlay').style.display = 'flex';
       document.getElementById('dataStatus').style.display = 'block';
-      updateProgress('Connecting to server...', 10, 'Connecting', '-');
+      updateProgress('Getting data info...', 5, 'Starting', '-');
       
       try {
-        // Step 1: Fetch all data
-        updateProgress('Fetching all data from sheet...', 30, 'Fetching', '-');
+        // Step 1: Get total row count
+        const infoResponse = await fetch(`${APPS_SCRIPT_URL}?action=getInfo`);
+        const info = await infoResponse.json();
         
-        const response = await fetch(APPS_SCRIPT_URL);
-        const result = await response.json();
-
-        if (result.error) {
-          throw new Error(result.error);
+        if (info.error) {
+          throw new Error(info.error);
         }
-
-        if (!result.data || !Array.isArray(result.data)) {
-          throw new Error('Invalid data format received');
+        
+        const totalRows = info.totalRows;
+        const totalPages = info.totalPages;
+        const pageSize = info.pageSize;
+        
+        updateProgress(`Found ${totalRows} rows. Loading in chunks...`, 10, 'Loading', totalRows);
+        
+        // Step 2: Load all pages
+        allRawData = [];
+        
+        for (let page = 0; page < totalPages; page++) {
+          const percentage = 10 + Math.round((page / totalPages) * 60); // 10% to 70%
+          updateProgress(
+            `Loading chunk ${page + 1} of ${totalPages}...`, 
+            percentage, 
+            'Loading',
+            allRawData.length
+          );
+          
+          const pageResponse = await fetch(`${APPS_SCRIPT_URL}?page=${page}&pageSize=${pageSize}`);
+          const pageResult = await pageResponse.json();
+          
+          if (pageResult.error) {
+            throw new Error(pageResult.error);
+          }
+          
+          if (pageResult.data && Array.isArray(pageResult.data)) {
+            // For first page, include header. For subsequent pages, skip header
+            if (page === 0) {
+              allRawData = pageResult.data;
+            } else {
+              allRawData = allRawData.concat(pageResult.data);
+            }
+          }
         }
-
-        allRawData = result.data;
-        const totalRows = allRawData.length;
         
-        updateProgress('Data fetched successfully!', 50, 'Processing', totalRows);
+        updateProgress('All data loaded! Processing...', 75, 'Processing', allRawData.length);
         
-        // Step 2: Process all data
-        updateProgress('Processing all ambassadors...', 70, 'Processing', totalRows);
+        // Step 3: Process all data
         await processAllData();
         
-        // Step 3: Complete
-        updateProgress('All data loaded successfully!', 100, 'Complete', totalRows);
+        updateProgress('Complete!', 100, 'Complete', allRawData.length);
         
         setTimeout(() => {
           document.getElementById('progressOverlay').style.display = 'none';
@@ -647,8 +671,11 @@
       } catch (error) {
         console.error('Error loading data:', error);
         document.getElementById('progressOverlay').style.display = 'none';
-        showError('Failed to load data: ' + error.message);
-        document.getElementById('dataStatus').innerHTML = '❌ Failed to load data. Please refresh the page.';
+        
+        let errorMessage = 'Failed to load data: ' + error.message;
+        
+        showError(errorMessage);
+        document.getElementById('dataStatus').innerHTML = '❌ ' + errorMessage;
         document.getElementById('dataStatus').className = 'data-status';
         document.getElementById('dataStatus').style.background = '#fee';
         document.getElementById('dataStatus').style.borderColor = '#c33';
